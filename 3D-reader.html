@@ -47,6 +47,13 @@
             margin-bottom: 10px;
         }
         
+        .folder-input-container {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+        }
+        
         button {
             background: #007bff;
             color: white;
@@ -55,6 +62,7 @@
             border-radius: 5px;
             cursor: pointer;
             margin-right: 5px;
+            margin-top: 5px;
         }
         
         button:hover {
@@ -71,6 +79,7 @@
             border-radius: 5px;
             font-size: 12px;
             backdrop-filter: blur(10px);
+            max-width: 400px;
         }
         
         .loading {
@@ -84,6 +93,13 @@
             border-radius: 10px;
             display: none;
             backdrop-filter: blur(10px);
+            z-index: 1000;
+        }
+        
+        .warning {
+            color: #ff6b6b;
+            font-size: 12px;
+            margin-top: 5px;
         }
     </style>
 </head>
@@ -92,19 +108,33 @@
     
     <div class="controls">
         <div class="file-input-container">
+            <strong>Загрузка одиночного файла:</strong><br>
             <input type="file" id="modelInput" accept=".glb,.gltf,.fbx,.obj" />
+            <div class="warning">Для GLTF с внешними файлами используйте загрузку папки ниже</div>
         </div>
+        
+        <div class="folder-input-container">
+            <strong>Загрузка папки с GLTF моделью:</strong><br>
+            <input type="file" id="folderInput" webkitdirectory directory multiple />
+            <div class="warning">Выберите папку, содержащую .gltf, .bin и файлы текстур</div>
+        </div>
+        
         <button onclick="resetCamera()">Сброс камеры</button>
         <button onclick="toggleRotation()" id="rotateBtn">Вращение: ВКЛ</button>
+        <button onclick="toggleGrid()" id="gridBtn">Сетка: ВКЛ</button>
     </div>
     
     <div class="info">
-        Поддерживаемые форматы: .glb, .gltf, .fbx, .obj<br>
-        Перетаскивайте для вращения, колесо мыши для масштаба
+        <strong>Инструкция:</strong><br>
+        • Для простых моделей используйте загрузку одиночного файла<br>
+        • Для GLTF с внешними файлами (.bin, текстуры) используйте загрузку папки<br>
+        • Поддерживаемые форматы: .glb, .gltf, .fbx, .obj<br>
+        • Управление: перетаскивание - вращение, колесо мыши - масштаб
     </div>
     
     <div class="loading" id="loading">
         Загрузка модели...
+        <div id="loadingProgress"></div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -112,15 +142,14 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
 
     <script>
         // Основные переменные
         let scene, camera, renderer, controls;
         let currentModel = null;
         let autoRotate = true;
-        let mouseX = 0, mouseY = 0;
-        let windowHalfX = window.innerWidth / 2;
-        let windowHalfY = window.innerHeight / 2;
+        let gridVisible = true;
 
         // Инициализация сцены
         function init() {
@@ -135,7 +164,11 @@
 
             // Создание рендерера
             const canvas = document.getElementById('canvas');
-            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer = new THREE.WebGLRenderer({ 
+                canvas, 
+                antialias: true,
+                alpha: true 
+            });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -153,9 +186,11 @@
 
             // Сетка для ориентира
             const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+            gridHelper.name = 'gridHelper';
             scene.add(gridHelper);
 
             const axesHelper = new THREE.AxesHelper(5);
+            axesHelper.name = 'axesHelper';
             scene.add(axesHelper);
 
             // OrbitControls для управления камерой
@@ -168,14 +203,20 @@
             // Обработчик изменения размера окна
             window.addEventListener('resize', onWindowResize);
 
-            // Обработчик выбора файла
+            // Обработчики выбора файлов
             document.getElementById('modelInput').addEventListener('change', handleFileSelect);
+            document.getElementById('folderInput').addEventListener('change', handleFolderSelect);
+
+            // Инициализация Draco Loader для сжатых моделей
+            const dracoLoader = new THREE.DRACOLoader();
+            dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
+            THREE.GLTFLoader.setDRACOLoader(dracoLoader);
 
             // Запуск анимации
             animate();
         }
 
-        // Обработка выбора файла
+        // Обработка выбора одиночного файла
         function handleFileSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -183,44 +224,181 @@
             const fileName = file.name.toLowerCase();
             const extension = fileName.split('.').pop();
             
-            showLoading(true);
+            showLoading(true, 'Загрузка модели...');
 
             const reader = new FileReader();
+            
+            if (extension === 'gltf') {
+                // Для GLTF читаем как текст
+                reader.readAsText(file);
+                reader.onload = function(e) {
+                    try {
+                        const gltfContent = e.target.result;
+                        loadGLTFFromContent(gltfContent, file.name);
+                    } catch (error) {
+                        console.error('Ошибка загрузки GLTF:', error);
+                        alert('Ошибка загрузки GLTF файла: ' + error.message);
+                        showLoading(false);
+                    }
+                };
+            } else {
+                // Для других форматов читаем как ArrayBuffer
+                reader.readAsArrayBuffer(file);
+                reader.onload = function(e) {
+                    const arrayBuffer = e.target.result;
+                    loadModelFromArrayBuffer(arrayBuffer, file, extension);
+                };
+            }
+
+            reader.onerror = function(error) {
+                console.error('Ошибка чтения файла:', error);
+                alert('Ошибка чтения файла');
+                showLoading(false);
+            };
+        }
+
+        // Обработка выбора папки
+        function handleFolderSelect(event) {
+            const files = Array.from(event.target.files);
+            if (files.length === 0) return;
+
+            showLoading(true, 'Обработка файлов...');
+
+            // Ищем GLTF файл
+            const gltfFile = files.find(file => 
+                file.name.toLowerCase().endsWith('.gltf')
+            );
+
+            if (!gltfFile) {
+                alert('В выбранной папке не найден .gltf файл');
+                showLoading(false);
+                return;
+            }
+
+            // Создаем виртуальную файловую систему в памяти
+            const virtualFiles = {};
+            files.forEach(file => {
+                virtualFiles[file.name] = file;
+            });
+
+            // Читаем GLTF файл
+            const reader = new FileReader();
+            reader.readAsText(gltfFile);
             reader.onload = function(e) {
-                const contents = e.target.result;
-                
-                // Удаляем предыдущую модель
+                try {
+                    loadGLTFFromContent(e.target.result, gltfFile.name, virtualFiles);
+                } catch (error) {
+                    console.error('Ошибка загрузки GLTF:', error);
+                    alert('Ошибка загрузки модели из папки: ' + error.message);
+                    showLoading(false);
+                }
+            };
+        }
+
+        // Загрузка GLTF из содержимого с виртуальной файловой системой
+        function loadGLTFFromContent(gltfContent, fileName, virtualFiles = null) {
+            let gltfData;
+            try {
+                gltfData = JSON.parse(gltfContent);
+            } catch (error) {
+                throw new Error('Некорректный JSON в GLTF файле');
+            }
+
+            // Создаем кастомный загрузчик для обработки внешних ресурсов
+            const loader = new THREE.GLTFLoader();
+            
+            if (virtualFiles) {
+                // Устанавливаем кастомную функцию загрузки для работы с виртуальной ФС
+                loader.setResourcePath('');
+                loader.load = function (url, onLoad, onProgress, onError) {
+                    // Для GLTF контента
+                    if (url === undefined || typeof url === 'string' && url.length === 0) {
+                        const gltf = {
+                            scene: this.parse(gltfData, '', onLoad),
+                            scenes: [this.parse(gltfData, '', onLoad)],
+                            animations: [],
+                            cameras: [],
+                            asset: {},
+                            parser: this,
+                            userData: {}
+                        };
+                        onLoad(gltf);
+                        return;
+                    }
+                    
+                    // Для внешних ресурсов
+                    const file = virtualFiles[url];
+                    if (!file) {
+                        if (onError) onError(new Error(`Файл не найден: ${url}`));
+                        return;
+                    }
+
+                    const fileReader = new FileReader();
+                    fileReader.onload = function(e) {
+                        onLoad(e.target.result);
+                    };
+                    fileReader.onerror = onError;
+
+                    if (url.toLowerCase().endsWith('.bin')) {
+                        fileReader.readAsArrayBuffer(file);
+                    } else {
+                        fileReader.readAsArrayBuffer(file);
+                    }
+                }.bind(loader);
+            }
+
+            // Загружаем модель
+            loader.parse(gltfData, '', function(gltf) {
                 if (currentModel) {
                     scene.remove(currentModel);
                 }
-
-                // Загружаем модель в зависимости от расширения
-                switch(extension) {
-                    case 'glb':
-                    case 'gltf':
-                        loadGLTF(contents, file);
-                        break;
-                    case 'fbx':
-                        loadFBX(contents, file);
-                        break;
-                    case 'obj':
-                        loadOBJ(contents, file);
-                        break;
-                    default:
-                        alert('Неподдерживаемый формат файла');
-                        showLoading(false);
-                }
-            };
-
-            reader.readAsArrayBuffer(file);
+                currentModel = gltf.scene;
+                setupModel(currentModel);
+                showLoading(false);
+            }, function(error) {
+                console.error('Ошибка парсинга GLTF:', error);
+                alert('Ошибка загрузки модели: ' + error.message);
+                showLoading(false);
+            });
         }
 
-        // Загрузка GLTF/GLB
-        function loadGLTF(arrayBuffer, file) {
-            const loader = new THREE.GLTFLoader();
+        // Загрузка модели из ArrayBuffer
+        function loadModelFromArrayBuffer(arrayBuffer, file, extension) {
+            const fileName = file.name;
+            
+            // Удаляем предыдущую модель
+            if (currentModel) {
+                scene.remove(currentModel);
+            }
+
             const blob = new Blob([arrayBuffer]);
             const url = URL.createObjectURL(blob);
 
+            try {
+                switch(extension) {
+                    case 'glb':
+                        loadGLB(url, fileName);
+                        break;
+                    case 'fbx':
+                        loadFBX(url, fileName);
+                        break;
+                    case 'obj':
+                        loadOBJ(url, fileName);
+                        break;
+                    default:
+                        throw new Error('Неподдерживаемый формат файла: ' + extension);
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки:', error);
+                alert('Ошибка загрузки модели: ' + error.message);
+                showLoading(false);
+                URL.revokeObjectURL(url);
+            }
+        }
+
+        // Загрузка GLB
+        function loadGLB(url, fileName) {
+            const loader = new THREE.GLTFLoader();
             loader.load(url, 
                 function(gltf) {
                     currentModel = gltf.scene;
@@ -229,12 +407,12 @@
                     showLoading(false);
                 },
                 function(progress) {
-                    // Прогресс загрузки
-                    console.log((progress.loaded / progress.total * 100) + '% загружено');
+                    const percent = progress.loaded / progress.total * 100;
+                    showLoading(true, `Загрузка: ${Math.round(percent)}%`);
                 },
                 function(error) {
-                    console.error('Ошибка загрузки GLTF:', error);
-                    alert('Ошибка загрузки модели: ' + error.message);
+                    console.error('Ошибка загрузки GLB:', error);
+                    alert('Ошибка загрузки GLB модели: ' + error.message);
                     showLoading(false);
                     URL.revokeObjectURL(url);
                 }
@@ -242,11 +420,8 @@
         }
 
         // Загрузка FBX
-        function loadFBX(arrayBuffer, file) {
+        function loadFBX(url, fileName) {
             const loader = new THREE.FBXLoader();
-            const blob = new Blob([arrayBuffer]);
-            const url = URL.createObjectURL(blob);
-
             loader.load(url, 
                 function(object) {
                     currentModel = object;
@@ -255,11 +430,12 @@
                     showLoading(false);
                 },
                 function(progress) {
-                    console.log((progress.loaded / progress.total * 100) + '% загружено');
+                    const percent = progress.loaded / progress.total * 100;
+                    showLoading(true, `Загрузка: ${Math.round(percent)}%`);
                 },
                 function(error) {
                     console.error('Ошибка загрузки FBX:', error);
-                    alert('Ошибка загрузки модели: ' + error.message);
+                    alert('Ошибка загрузки FBX модели: ' + error.message);
                     showLoading(false);
                     URL.revokeObjectURL(url);
                 }
@@ -267,11 +443,8 @@
         }
 
         // Загрузка OBJ
-        function loadOBJ(arrayBuffer, file) {
+        function loadOBJ(url, fileName) {
             const loader = new THREE.OBJLoader();
-            const blob = new Blob([arrayBuffer]);
-            const url = URL.createObjectURL(blob);
-
             loader.load(url, 
                 function(object) {
                     currentModel = object;
@@ -280,11 +453,12 @@
                     showLoading(false);
                 },
                 function(progress) {
-                    console.log((progress.loaded / progress.total * 100) + '% загружено');
+                    const percent = progress.loaded / progress.total * 100;
+                    showLoading(true, `Загрузка: ${Math.round(percent)}%`);
                 },
                 function(error) {
                     console.error('Ошибка загрузки OBJ:', error);
-                    alert('Ошибка загрузки модели: ' + error.message);
+                    alert('Ошибка загрузки OBJ модели: ' + error.message);
                     showLoading(false);
                     URL.revokeObjectURL(url);
                 }
@@ -301,9 +475,9 @@
             const size = box.getSize(new THREE.Vector3());
             
             // Позиционирование модели в центре
-            model.position.x += (model.position.x - center.x);
-            model.position.y += (model.position.y - center.y);
-            model.position.z += (model.position.z - center.z);
+            model.position.x -= center.x;
+            model.position.y -= center.y;
+            model.position.z -= center.z;
             
             // Настройка камеры под размер модели
             const maxDim = Math.max(size.x, size.y, size.z);
@@ -312,6 +486,7 @@
             
             cameraZ *= 1.5; // Отступ для лучшего обзора
             camera.position.set(cameraZ, cameraZ, cameraZ);
+            controls.target.set(0, 0, 0);
             controls.update();
             
             // Включение теней для всех мешей модели
@@ -324,14 +499,26 @@
         }
 
         // Показать/скрыть индикатор загрузки
-        function showLoading(show) {
-            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        function showLoading(show, message = 'Загрузка модели...') {
+            const loadingElement = document.getElementById('loading');
+            const progressElement = document.getElementById('loadingProgress');
+            
+            if (show) {
+                loadingElement.style.display = 'block';
+                loadingElement.innerHTML = message;
+                if (progressElement) {
+                    progressElement.textContent = message.includes('%') ? '' : '';
+                }
+            } else {
+                loadingElement.style.display = 'none';
+            }
         }
 
         // Сброс камеры
         function resetCamera() {
             camera.position.set(5, 5, 5);
-            controls.reset();
+            controls.target.set(0, 0, 0);
+            controls.update();
         }
 
         // Переключение автоматического вращения
@@ -340,6 +527,19 @@
             controls.autoRotate = autoRotate;
             document.getElementById('rotateBtn').textContent = 
                 'Вращение: ' + (autoRotate ? 'ВКЛ' : 'ВЫКЛ');
+        }
+
+        // Переключение сетки
+        function toggleGrid() {
+            gridVisible = !gridVisible;
+            const gridHelper = scene.getObjectByName('gridHelper');
+            const axesHelper = scene.getObjectByName('axesHelper');
+            
+            if (gridHelper) gridHelper.visible = gridVisible;
+            if (axesHelper) axesHelper.visible = gridVisible;
+            
+            document.getElementById('gridBtn').textContent = 
+                'Сетка: ' + (gridVisible ? 'ВКЛ' : 'ВЫКЛ');
         }
 
         // Обработка изменения размера окна
