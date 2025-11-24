@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Model Viewer - Point Light</title>
+    <title>3D Model Viewer - Optimized Shadows</title>
     <style>
         * {
             margin: 0;
@@ -284,6 +284,7 @@
                     <button onclick="toggleAxes()" id="axesBtn">Оси: ВКЛ</button>
                     <button onclick="toggleGrid()" id="gridBtn">Сетка: ВКЛ</button>
                     <button onclick="toggleLightHelper()" id="lightHelperBtn">Индикатор света: ВКЛ</button>
+                    <button onclick="toggleShadows()" id="shadowsBtn">Тени: ВКЛ</button>
                 </div>
             </div>
             
@@ -318,6 +319,16 @@
                 <div class="slider-container">
                     <label>Затухание: <span id="decayValue">1.0</span></label>
                     <input type="range" id="lightDecay" min="0" max="5" step="0.1" value="1">
+                </div>
+                
+                <div class="slider-container">
+                    <label>Качество теней: <span id="shadowQualityValue">Среднее</span></label>
+                    <select id="shadowQuality" onchange="updateShadowQuality()">
+                        <option value="low">Низкое (256px)</option>
+                        <option value="medium" selected>Среднее (512px)</option>
+                        <option value="high">Высокое (1024px)</option>
+                        <option value="ultra">Ультра (2048px)</option>
+                    </select>
                 </div>
                 
                 <div class="slider-container">
@@ -364,6 +375,7 @@
         let uiVisible = true;
         let lightAttachedToCamera = false;
         let lightHelperVisible = true;
+        let shadowsEnabled = true;
 
         // Инициализация сцены
         function init() {
@@ -383,7 +395,7 @@
             });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Мягкие тени
 
             // Освещение
             const ambientLight = new THREE.AmbientLight(0x404040, 0.2);
@@ -393,10 +405,10 @@
             pointLight = new THREE.PointLight(0xffffff, 1, 10, 1);
             pointLight.position.set(5, 10, 7);
             pointLight.castShadow = true;
-            pointLight.shadow.mapSize.width = 1024;
-            pointLight.shadow.mapSize.height = 1024;
-            pointLight.shadow.camera.near = 0.5;
-            pointLight.shadow.camera.far = 50;
+            
+            // Оптимизированные настройки теней
+            updateShadowQuality();
+            
             scene.add(pointLight);
 
             // Визуализатор точечного света
@@ -488,6 +500,43 @@
             animate();
         }
 
+        // Обновление качества теней
+        function updateShadowQuality() {
+            const quality = document.getElementById('shadowQuality').value;
+            let mapSize;
+            
+            switch(quality) {
+                case 'low':
+                    mapSize = 256;
+                    document.getElementById('shadowQualityValue').textContent = 'Низкое (256px)';
+                    break;
+                case 'medium':
+                    mapSize = 512;
+                    document.getElementById('shadowQualityValue').textContent = 'Среднее (512px)';
+                    break;
+                case 'high':
+                    mapSize = 1024;
+                    document.getElementById('shadowQualityValue').textContent = 'Высокое (1024px)';
+                    break;
+                case 'ultra':
+                    mapSize = 2048;
+                    document.getElementById('shadowQualityValue').textContent = 'Ультра (2048px)';
+                    break;
+            }
+            
+            // Обновляем настройки теней
+            pointLight.shadow.mapSize.width = mapSize;
+            pointLight.shadow.mapSize.height = mapSize;
+            pointLight.shadow.camera.near = 0.1;
+            pointLight.shadow.camera.far = pointLight.distance * 2;
+            pointLight.shadow.bias = -0.0001; // Уменьшаем артефакты теней
+            pointLight.shadow.normalBias = 0.02; // Уменьшаем self-shadowing артефакты
+            
+            // Пересоздаем карту теней
+            pointLight.shadow.map?.dispose();
+            pointLight.shadow.map = null;
+        }
+
         // Настройка обработчиков событий для панели управления
         function setupControlPanelEvents() {
             const controlsPanel = document.getElementById('controls-panel');
@@ -551,6 +600,10 @@
             pointLight.decay = decay;
             pointLight.color = new THREE.Color(color);
             
+            // Обновляем настройки теней при изменении расстояния
+            pointLight.shadow.camera.far = distance * 2;
+            pointLight.shadow.map = null; // Принудительно пересоздаем карту теней
+            
             // Обновляем значения на слайдерах
             document.getElementById('lightXValue').textContent = x.toFixed(1);
             document.getElementById('lightYValue').textContent = y.toFixed(1);
@@ -591,7 +644,7 @@
             
             // Меняем цвет в зависимости от настроек цвета
             const color = document.getElementById('lightColor').value;
-            lightDirection.style.background = `radial-gradient(circle, ${color} 0%, ${this.adjustColor(color, -50)} 100%)`;
+            lightDirection.style.background = `radial-gradient(circle, ${color} 0%, ${adjustColor(color, -50)} 100%)`;
         }
 
         // Вспомогательная функция для изменения цвета
@@ -663,6 +716,24 @@
             lightHelper.visible = lightHelperVisible;
             document.getElementById('lightHelperBtn').textContent = 
                 'Индикатор света: ' + (lightHelperVisible ? 'ВКЛ' : 'ВЫКЛ');
+        }
+
+        // Переключение теней
+        function toggleShadows() {
+            shadowsEnabled = !shadowsEnabled;
+            renderer.shadowMap.enabled = shadowsEnabled;
+            pointLight.castShadow = shadowsEnabled;
+            
+            // Обновляем тени для всех объектов в сцене
+            scene.traverse(function(object) {
+                if (object.isMesh) {
+                    object.castShadow = shadowsEnabled;
+                    object.receiveShadow = shadowsEnabled;
+                }
+            });
+            
+            document.getElementById('shadowsBtn').textContent = 
+                'Тени: ' + (shadowsEnabled ? 'ВКЛ' : 'ВЫКЛ');
         }
 
         // Сворачивание/разворачивание панели управления
@@ -853,8 +924,8 @@
             // Включение теней для всех мешей модели
             model.traverse(function(child) {
                 if (child.isMesh) {
-                    child.castShadow = true;
-                    child.receiveShadow = true;
+                    child.castShadow = shadowsEnabled;
+                    child.receiveShadow = shadowsEnabled;
                 }
             });
         }
