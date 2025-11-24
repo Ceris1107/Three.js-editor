@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Model Viewer - Mobile</title>
+    <title>3D Model Viewer</title>
     <style>
         * {
             margin: 0;
@@ -13,9 +13,8 @@
         
         body {
             font-family: Arial, sans-serif;
+            overflow: hidden;
             background: #1a1a1a;
-            color: white;
-            touch-action: none;
         }
         
         #canvas {
@@ -29,47 +28,29 @@
         
         .controls {
             position: fixed;
-            top: 10px;
-            left: 10px;
-            right: 10px;
+            top: 20px;
+            left: 20px;
             z-index: 100;
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(0, 0, 0, 0.8);
             padding: 15px;
             border-radius: 10px;
+            color: white;
             backdrop-filter: blur(10px);
         }
         
-        .file-input-container {
-            margin-bottom: 10px;
-        }
-        
         input[type="file"] {
-            width: 100%;
-            padding: 10px;
-            margin: 5px 0;
-            background: #333;
             color: white;
-            border: 1px solid #555;
-            border-radius: 5px;
-        }
-        
-        .multi-file-upload {
-            margin: 10px 0;
-            padding: 10px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 5px;
+            margin-bottom: 10px;
         }
         
         button {
             background: #007bff;
             color: white;
             border: none;
-            padding: 10px 15px;
+            padding: 8px 15px;
             border-radius: 5px;
             cursor: pointer;
-            margin: 5px;
-            width: calc(50% - 10px);
-            font-size: 14px;
+            margin-right: 5px;
         }
         
         button:hover {
@@ -78,14 +59,13 @@
         
         .info {
             position: fixed;
-            bottom: 10px;
-            left: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.9);
+            bottom: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.8);
             padding: 10px;
             border-radius: 5px;
             font-size: 12px;
-            backdrop-filter: blur(10px);
         }
         
         .loading {
@@ -93,39 +73,11 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            background: rgba(0, 0, 0, 0.8);
             padding: 20px;
             border-radius: 10px;
             display: none;
-            backdrop-filter: blur(10px);
-            z-index: 1000;
-            text-align: center;
-        }
-        
-        .step-indicator {
-            margin: 10px 0;
-            font-size: 14px;
-            color: #ccc;
-        }
-        
-        @media (max-width: 768px) {
-            .controls {
-                top: 5px;
-                left: 5px;
-                right: 5px;
-                padding: 10px;
-            }
-            
-            button {
-                padding: 12px 10px;
-                font-size: 16px; /* Увеличиваем для мобильных */
-            }
-            
-            .info {
-                bottom: 5px;
-                left: 5px;
-                right: 5px;
-            }
         }
     </style>
 </head>
@@ -133,52 +85,33 @@
     <canvas id="canvas"></canvas>
     
     <div class="controls">
-        <div class="file-input-container">
-            <strong>Загрузка 3D модели:</strong>
-            <div class="step-indicator" id="stepIndicator">Шаг 1: Выберите основной файл (.gltf)</div>
-            <input type="file" id="mainFileInput" accept=".gltf,.glb" />
-        </div>
-        
-        <div class="multi-file-upload" id="additionalFilesSection" style="display: none;">
-            <strong>Дополнительные файлы (если нужны):</strong>
-            <input type="file" id="binFileInput" accept=".bin" multiple />
-            <input type="file" id="textureFileInput" accept=".jpg,.jpeg,.png,.webp" multiple />
-            <button onclick="loadWithAdditionalFiles()">Загрузить с дополнительными файлами</button>
-        </div>
-        
-        <div>
-            <button onclick="loadSelectedFile()" id="loadBtn">Загрузить выбранный файл</button>
-            <button onclick="resetCamera()">Сброс камеры</button>
-            <button onclick="toggleRotation()" id="rotateBtn">Вращение: ВКЛ</button>
-        </div>
+        <input type="file" id="modelInput" accept=".glb,.gltf,.fbx,.obj" />
+        <button onclick="resetCamera()">Сброс камеры</button>
+        <button onclick="toggleAxes()" id="axesBtn">Оси: ВКЛ</button>
+        <button onclick="toggleGrid()" id="gridBtn">Сетка: ВКЛ</button>
     </div>
     
     <div class="info">
-        <strong>Для мобильных устройств:</strong><br>
-        • Рекомендуется использовать .GLB (все в одном файле)<br>
-        • Для .GLTФ: сначала выберите основной .gltf файл, затем дополнительные .bin и текстуры если нужно<br>
-        • Касание + перемещение: вращение, два пальца: масштаб
+        Поддерживаемые форматы: .glb, .gltf, .fbx, .obj<br>
+        ЛКМ + перемещение: вращение, ПКМ + перемещение: панорамирование, Колесо: масштаб
     </div>
     
     <div class="loading" id="loading">
-        <div id="loadingText">Загрузка модели...</div>
-        <div id="loadingDetails" style="margin-top: 10px; font-size: 12px;"></div>
+        Загрузка модели...
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <script>
         // Основные переменные
         let scene, camera, renderer, controls;
         let currentModel = null;
-        let autoRotate = true;
-        
-        // Файлы для загрузки
-        let mainFile = null;
-        let binFiles = [];
-        let textureFiles = [];
+        let axesVisible = true;
+        let gridVisible = true;
 
         // Инициализация сцены
         function init() {
@@ -188,17 +121,16 @@
 
             // Создание камеры
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(5, 5, 5);
+            camera.position.set(10, 10, 10);
 
             // Создание рендерера
             const canvas = document.getElementById('canvas');
             renderer = new THREE.WebGLRenderer({ 
                 canvas, 
-                antialias: true,
-                alpha: true 
+                antialias: true 
             });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Оптимизация для мобильных
+            renderer.shadowMap.enabled = true;
 
             // Освещение
             const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
@@ -206,221 +138,153 @@
 
             const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
             directionalLight.position.set(10, 10, 5);
+            directionalLight.castShadow = true;
             scene.add(directionalLight);
 
-            // OrbitControls
+            // Сетка
+            const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+            gridHelper.name = 'grid';
+            scene.add(gridHelper);
+
+            // Оси координат
+            const axesHelper = new THREE.AxesHelper(5);
+            axesHelper.name = 'axes';
+            scene.add(axesHelper);
+
+            // OrbitControls - свободная камера
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
-            controls.autoRotate = autoRotate;
-            
-            // Настройки для мобильных устройств
-            if (isMobile()) {
-                controls.enablePan = false;
-                controls.touches = {
-                    ONE: THREE.TOUCH.ROTATE,
-                    TWO: THREE.TOUCH.DOLLY_PAN
-                };
-            }
+            controls.screenSpacePanning = false;
+            controls.minDistance = 1;
+            controls.maxDistance = 500;
+            controls.maxPolarAngle = Math.PI; // Можно вращать под любым углом
 
             // Обработчики событий
             window.addEventListener('resize', onWindowResize);
-            document.getElementById('mainFileInput').addEventListener('change', handleMainFileSelect);
-            document.getElementById('binFileInput').addEventListener('change', handleBinFilesSelect);
-            document.getElementById('textureFileInput').addEventListener('change', handleTextureFilesSelect);
+            document.getElementById('modelInput').addEventListener('change', handleFileSelect);
 
             // Запуск анимации
             animate();
         }
 
-        // Проверка на мобильное устройство
-        function isMobile() {
-            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        }
+        // Обработка выбора файла
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
 
-        // Обработка выбора основного файла
-        function handleMainFileSelect(event) {
-            const files = event.target.files;
-            if (files.length === 0) return;
+            showLoading(true);
+
+            const fileName = file.name.toLowerCase();
+            const extension = fileName.split('.').pop();
             
-            mainFile = files[0];
-            const fileName = mainFile.name.toLowerCase();
-            
-            if (fileName.endsWith('.glb')) {
-                // GLB - все в одном файле, сразу загружаем
-                document.getElementById('stepIndicator').textContent = 'GLB файл - все в одном, можно загружать';
-                document.getElementById('additionalFilesSection').style.display = 'none';
-            } else if (fileName.endsWith('.gltf')) {
-                // GLTF - могут потребоваться дополнительные файлы
-                document.getElementById('stepIndicator').textContent = 'Шаг 2: При необходимости выберите .bin и текстуры';
-                document.getElementById('additionalFilesSection').style.display = 'block';
-            }
-        }
-
-        // Обработка выбора .bin файлов
-        function handleBinFilesSelect(event) {
-            binFiles = Array.from(event.target.files);
-        }
-
-        // Обработка выбора файлов текстур
-        function handleTextureFilesSelect(event) {
-            textureFiles = Array.from(event.target.files);
-        }
-
-        // Загрузка только выбранного файла (для GLB или простых GLTF)
-        function loadSelectedFile() {
-            if (!mainFile) {
-                alert('Сначала выберите основной файл');
-                return;
-            }
-
-            showLoading(true, 'Загрузка модели...');
-            
-            const fileName = mainFile.name.toLowerCase();
             const reader = new FileReader();
-
-            if (fileName.endsWith('.glb')) {
-                reader.readAsArrayBuffer(mainFile);
-                reader.onload = function(e) {
-                    loadGLBFromArrayBuffer(e.target.result, mainFile.name);
-                };
-            } else if (fileName.endsWith('.gltf')) {
-                reader.readAsText(mainFile);
-                reader.onload = function(e) {
-                    try {
-                        // Пытаемся загрузить без дополнительных файлов
-                        loadGLTFFromContent(e.target.result, mainFile.name);
-                    } catch (error) {
-                        console.error('Ошибка загрузки:', error);
-                        document.getElementById('loadingDetails').textContent = 
-                            'Возможно, нужны дополнительные файлы. Попробуйте загрузить с дополнительными файлами.';
-                    }
-                };
-            }
-        }
-
-        // Загрузка с дополнительными файлами
-        function loadWithAdditionalFiles() {
-            if (!mainFile) {
-                alert('Сначала выберите основной .gltf файл');
-                return;
-            }
-
-            showLoading(true, 'Подготовка файлов...');
-
-            const reader = new FileReader();
-            reader.readAsText(mainFile);
             reader.onload = function(e) {
-                try {
-                    const virtualFiles = {};
-                    virtualFiles[mainFile.name] = mainFile;
-
-                    // Добавляем .bin файлы
-                    binFiles.forEach(file => {
-                        virtualFiles[file.name] = file;
-                    });
-
-                    // Добавляем текстуры
-                    textureFiles.forEach(file => {
-                        virtualFiles[file.name] = file;
-                    });
-
-                    loadGLTFFromContent(e.target.result, mainFile.name, virtualFiles);
-                } catch (error) {
-                    console.error('Ошибка загрузки:', error);
-                    alert('Ошибка загрузки: ' + error.message);
-                    showLoading(false);
+                const arrayBuffer = e.target.result;
+                
+                // Удаляем предыдущую модель
+                if (currentModel) {
+                    scene.remove(currentModel);
                 }
+
+                loadModel(arrayBuffer, file, extension);
             };
+            reader.readAsArrayBuffer(file);
         }
 
-        // Загрузка GLB из ArrayBuffer
-        function loadGLBFromArrayBuffer(arrayBuffer, fileName) {
-            const loader = new THREE.GLTFLoader();
+        // Загрузка модели
+        function loadModel(arrayBuffer, file, extension) {
             const blob = new Blob([arrayBuffer]);
             const url = URL.createObjectURL(blob);
 
+            try {
+                switch(extension) {
+                    case 'glb':
+                    case 'gltf':
+                        loadGLTF(url);
+                        break;
+                    case 'fbx':
+                        loadFBX(url);
+                        break;
+                    case 'obj':
+                        loadOBJ(url);
+                        break;
+                    default:
+                        alert('Неподдерживаемый формат файла');
+                        showLoading(false);
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки:', error);
+                alert('Ошибка загрузки модели: ' + error.message);
+                showLoading(false);
+                URL.revokeObjectURL(url);
+            }
+        }
+
+        // Загрузка GLTF/GLB
+        function loadGLTF(url) {
+            const loader = new THREE.GLTFLoader();
             loader.load(url, 
                 function(gltf) {
-                    if (currentModel) {
-                        scene.remove(currentModel);
-                    }
                     currentModel = gltf.scene;
                     setupModel(currentModel);
                     URL.revokeObjectURL(url);
                     showLoading(false);
                 },
                 function(progress) {
-                    const percent = Math.round((progress.loaded / progress.total) * 100);
-                    showLoading(true, `Загрузка: ${percent}%`);
+                    console.log((progress.loaded / progress.total * 100) + '% загружено');
                 },
                 function(error) {
-                    console.error('Ошибка загрузки GLB:', error);
-                    alert('Ошибка загрузки GLB: ' + error.message);
+                    console.error('Ошибка загрузки GLTF:', error);
+                    alert('Ошибка загрузки модели: ' + error.message);
                     showLoading(false);
                     URL.revokeObjectURL(url);
                 }
             );
         }
 
-        // Загрузка GLTF с виртуальной файловой системой
-        function loadGLTFFromContent(gltfContent, fileName, virtualFiles = null) {
-            showLoading(true, 'Парсинг модели...');
-
-            let gltfData;
-            try {
-                gltfData = JSON.parse(gltfContent);
-            } catch (error) {
-                throw new Error('Некорректный JSON в GLTF файле');
-            }
-
-            const loader = new THREE.GLTFLoader();
-            
-            if (virtualFiles) {
-                // Создаем кастомный загрузчик для работы с виртуальными файлами
-                const originalLoad = loader.load.bind(loader);
-                loader.load = function(url, onLoad, onProgress, onError) {
-                    if (virtualFiles[url]) {
-                        const file = virtualFiles[url];
-                        const fileReader = new FileReader();
-                        
-                        if (url.toLowerCase().endsWith('.bin')) {
-                            fileReader.readAsArrayBuffer(file);
-                        } else {
-                            fileReader.readAsArrayBuffer(file);
-                        }
-                        
-                        fileReader.onload = function(e) {
-                            onLoad(e.target.result);
-                        };
-                        fileReader.onerror = onError;
-                    } else {
-                        // Если файл не найден в виртуальной ФС, пытаемся загрузить как обычно
-                        originalLoad(url, onLoad, onProgress, onError);
-                    }
-                };
-            }
-
-            // Парсим GLTF
-            loader.parse(gltfData, '', function(gltf) {
-                if (currentModel) {
-                    scene.remove(currentModel);
+        // Загрузка FBX
+        function loadFBX(url) {
+            const loader = new THREE.FBXLoader();
+            loader.load(url, 
+                function(object) {
+                    currentModel = object;
+                    setupModel(currentModel);
+                    URL.revokeObjectURL(url);
+                    showLoading(false);
+                },
+                function(progress) {
+                    console.log((progress.loaded / progress.total * 100) + '% загружено');
+                },
+                function(error) {
+                    console.error('Ошибка загрузки FBX:', error);
+                    alert('Ошибка загрузки модели: ' + error.message);
+                    showLoading(false);
+                    URL.revokeObjectURL(url);
                 }
-                currentModel = gltf.scene;
-                setupModel(currentModel);
-                showLoading(false);
-            }, function(error) {
-                console.error('Ошибка парсинга GLTF:', error);
-                
-                let errorMessage = 'Ошибка загрузки модели: ' + error.message;
-                if (error.message.includes('buffer') && !virtualFiles) {
-                    errorMessage += '\n\nВозможно, нужны дополнительные .bin файлы. ' +
-                                  'Попробуйте загрузить с дополнительными файлами.';
+            );
+        }
+
+        // Загрузка OBJ
+        function loadOBJ(url) {
+            const loader = new THREE.OBJLoader();
+            loader.load(url, 
+                function(object) {
+                    currentModel = object;
+                    setupModel(currentModel);
+                    URL.revokeObjectURL(url);
+                    showLoading(false);
+                },
+                function(progress) {
+                    console.log((progress.loaded / progress.total * 100) + '% загружено');
+                },
+                function(error) {
+                    console.error('Ошибка загрузки OBJ:', error);
+                    alert('Ошибка загрузки модели: ' + error.message);
+                    showLoading(false);
+                    URL.revokeObjectURL(url);
                 }
-                
-                alert(errorMessage);
-                showLoading(false);
-            });
+            );
         }
 
         // Настройка загруженной модели
@@ -432,20 +296,22 @@
             const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
             
+            // Центрируем модель в начале координат
             model.position.x -= center.x;
             model.position.y -= center.y;
             model.position.z -= center.z;
             
-            // Настройка камеры
+            // Настройка камеры под размер модели
             const maxDim = Math.max(size.x, size.y, size.z);
             const fov = camera.fov * (Math.PI / 180);
-            let cameraZ = Math.abs(maxDim / Math.sin(fov / 2)) * 1.5;
+            let cameraZ = Math.abs(maxDim / Math.sin(fov / 2));
             
+            cameraZ *= 1.5; // Отступ для лучшего обзора
             camera.position.set(cameraZ, cameraZ, cameraZ);
             controls.target.set(0, 0, 0);
             controls.update();
             
-            // Настройка материалов
+            // Включение теней для всех мешей модели
             model.traverse(function(child) {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -455,33 +321,33 @@
         }
 
         // Показать/скрыть индикатор загрузки
-        function showLoading(show, message = '') {
-            const loadingElement = document.getElementById('loading');
-            const loadingText = document.getElementById('loadingText');
-            
-            if (show) {
-                loadingElement.style.display = 'block';
-                loadingText.textContent = message;
-            } else {
-                loadingElement.style.display = 'none';
-                loadingText.textContent = 'Загрузка модели...';
-                document.getElementById('loadingDetails').textContent = '';
-            }
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
         }
 
         // Сброс камеры
         function resetCamera() {
-            camera.position.set(5, 5, 5);
+            camera.position.set(10, 10, 10);
             controls.target.set(0, 0, 0);
             controls.update();
         }
 
-        // Переключение вращения
-        function toggleRotation() {
-            autoRotate = !autoRotate;
-            controls.autoRotate = autoRotate;
-            document.getElementById('rotateBtn').textContent = 
-                'Вращение: ' + (autoRotate ? 'ВКЛ' : 'ВЫКЛ');
+        // Переключение осей координат
+        function toggleAxes() {
+            axesVisible = !axesVisible;
+            const axes = scene.getObjectByName('axes');
+            if (axes) axes.visible = axesVisible;
+            document.getElementById('axesBtn').textContent = 
+                'Оси: ' + (axesVisible ? 'ВКЛ' : 'ВЫКЛ');
+        }
+
+        // Переключение сетки
+        function toggleGrid() {
+            gridVisible = !gridVisible;
+            const grid = scene.getObjectByName('grid');
+            if (grid) grid.visible = gridVisible;
+            document.getElementById('gridBtn').textContent = 
+                'Сетка: ' + (gridVisible ? 'ВКЛ' : 'ВЫКЛ');
         }
 
         // Обработка изменения размера окна
