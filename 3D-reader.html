@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Model Viewer</title>
+    <title>3D Model Viewer - Point Light</title>
     <style>
         * {
             margin: 0;
@@ -15,6 +15,7 @@
             font-family: Arial, sans-serif;
             overflow: hidden;
             background: #1a1a1a;
+            touch-action: none;
         }
         
         #canvas {
@@ -26,46 +27,135 @@
             display: block;
         }
         
-        .controls {
+        .controls-container {
             position: fixed;
-            top: 20px;
-            left: 20px;
+            top: 0;
+            left: 0;
+            right: 0;
             z-index: 100;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border-radius: 10px;
+            transition: transform 0.3s ease;
+        }
+        
+        .controls-container.collapsed {
+            transform: translateY(calc(-100% + 60px));
+        }
+        
+        .controls {
+            background: rgba(0, 0, 0, 0.9);
+            padding: 10px;
+            border-radius: 0 0 10px 10px;
             color: white;
             backdrop-filter: blur(10px);
+            max-height: 70vh;
+            overflow-y: auto;
+            margin: 0 10px;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .toggle-controls {
+            position: absolute;
+            bottom: -50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 0 0 10px 10px;
+            cursor: pointer;
+            width: 150px;
+            text-align: center;
+            font-size: 14px;
+            z-index: 101;
+        }
+        
+        .control-group {
+            margin: 8px 0;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+        }
+        
+        .control-group h3 {
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #ccc;
         }
         
         input[type="file"] {
             color: white;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
+            width: 100%;
+            font-size: 14px;
+        }
+        
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin: 5px 0;
         }
         
         button {
             background: #007bff;
             color: white;
             border: none;
-            padding: 8px 15px;
+            padding: 8px 12px;
             border-radius: 5px;
             cursor: pointer;
-            margin-right: 5px;
+            font-size: 12px;
+            flex: 1;
+            min-width: 80px;
         }
         
         button:hover {
             background: #0056b3;
         }
         
+        .slider-container {
+            margin: 6px 0;
+        }
+        
+        .slider-container label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 3px;
+            color: #ccc;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin: 3px 0;
+            height: 20px;
+        }
+        
+        input[type="color"] {
+            width: 100%;
+            height: 30px;
+            border: none;
+            border-radius: 3px;
+            background: transparent;
+        }
+        
+        .value-display {
+            font-size: 11px;
+            color: #aaa;
+            text-align: right;
+        }
+        
         .info {
             position: fixed;
-            bottom: 20px;
-            left: 20px;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
             color: white;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 8px;
             border-radius: 5px;
-            font-size: 12px;
+            font-size: 11px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            transition: opacity 0.3s ease;
         }
         
         .loading {
@@ -74,26 +164,183 @@
             left: 50%;
             transform: translate(-50%, -50%);
             color: white;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.9);
             padding: 20px;
             border-radius: 10px;
             display: none;
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            text-align: center;
+        }
+        
+        .light-preview {
+            width: 80px;
+            height: 80px;
+            background: #333;
+            border-radius: 5px;
+            margin: 8px auto 0;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .light-direction {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 30px;
+            height: 30px;
+            background: radial-gradient(circle, #ffff00 0%, #ff9900 100%);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 15px #ff9900;
+        }
+        
+        /* Скрыть UI */
+        .hide-ui .controls-container,
+        .hide-ui .info {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .show-ui .controls-container,
+        .show-ui .info {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        /* Мобильные стили */
+        @media (max-width: 768px) {
+            .controls {
+                margin: 0 5px;
+                padding: 8px;
+                max-height: 60vh;
+            }
+            
+            .control-group {
+                margin: 6px 0;
+                padding: 6px;
+            }
+            
+            button {
+                padding: 10px 8px;
+                font-size: 14px;
+                min-width: 70px;
+            }
+            
+            .info {
+                bottom: 5px;
+                left: 5px;
+                right: 5px;
+                padding: 6px;
+                font-size: 10px;
+            }
+            
+            .toggle-controls {
+                bottom: -45px;
+                padding: 12px 20px;
+                font-size: 14px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .controls {
+                max-height: 50vh;
+            }
+            
+            .button-row {
+                flex-direction: column;
+            }
+            
+            button {
+                width: 100%;
+                margin-bottom: 3px;
+            }
+            
+            .control-group h3 {
+                font-size: 13px;
+            }
+            
+            .slider-container label {
+                font-size: 11px;
+            }
+            
+            .toggle-controls {
+                width: 130px;
+                font-size: 12px;
+            }
         }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
     
-    <div class="controls">
-        <input type="file" id="modelInput" accept=".glb,.gltf,.fbx,.obj" />
-        <button onclick="resetCamera()">Сброс камеры</button>
-        <button onclick="toggleAxes()" id="axesBtn">Оси: ВКЛ</button>
-        <button onclick="toggleGrid()" id="gridBtn">Сетка: ВКЛ</button>
+    <div class="controls-container" id="controls-container">
+        <div class="controls" id="controls-panel">
+            <div class="control-group">
+                <h3>Загрузка модели</h3>
+                <input type="file" id="modelInput" accept=".glb,.gltf,.fbx,.obj" />
+                <div class="button-row">
+                    <button onclick="resetCamera()">Сброс камеры</button>
+                    <button onclick="toggleAxes()" id="axesBtn">Оси: ВКЛ</button>
+                    <button onclick="toggleGrid()" id="gridBtn">Сетка: ВКЛ</button>
+                    <button onclick="toggleLightHelper()" id="lightHelperBtn">Индикатор света: ВКЛ</button>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <h3>Настройка точечного света</h3>
+                
+                <div class="slider-container">
+                    <label>Позиция X: <span id="lightXValue">5.0</span></label>
+                    <input type="range" id="lightX" min="-20" max="20" step="0.5" value="5">
+                </div>
+                
+                <div class="slider-container">
+                    <label>Позиция Y: <span id="lightYValue">10.0</span></label>
+                    <input type="range" id="lightY" min="-20" max="20" step="0.5" value="10">
+                </div>
+                
+                <div class="slider-container">
+                    <label>Позиция Z: <span id="lightZValue">7.0</span></label>
+                    <input type="range" id="lightZ" min="-20" max="20" step="0.5" value="7">
+                </div>
+                
+                <div class="slider-container">
+                    <label>Интенсивность: <span id="intensityValue">1.0</span></label>
+                    <input type="range" id="lightIntensity" min="0" max="2" step="0.1" value="1">
+                </div>
+                
+                <div class="slider-container">
+                    <label>Расстояние (радиус): <span id="distanceValue">10.0</span></label>
+                    <input type="range" id="lightDistance" min="1" max="50" step="1" value="10">
+                </div>
+                
+                <div class="slider-container">
+                    <label>Затухание: <span id="decayValue">1.0</span></label>
+                    <input type="range" id="lightDecay" min="0" max="5" step="0.1" value="1">
+                </div>
+                
+                <div class="slider-container">
+                    <label>Цвет света:</label>
+                    <input type="color" id="lightColor" value="#ffffff">
+                </div>
+                
+                <div class="button-row">
+                    <button onclick="resetLight()">Сброс света</button>
+                    <button onclick="attachLightToCamera()">Прикрепить к камере</button>
+                    <button onclick="detachLightFromCamera()">Открепить от камеры</button>
+                </div>
+                
+                <div class="light-preview">
+                    <div class="light-direction" id="lightDirection"></div>
+                </div>
+            </div>
+        </div>
+        <button class="toggle-controls" onclick="toggleControls()">Скрыть панель</button>
     </div>
     
     <div class="info">
-        Поддерживаемые форматы: .glb, .gltf, .fbx, .obj<br>
-        ЛКМ + перемещение: вращение, ПКМ + перемещение: панорамирование, Колесо: масштаб
+        Касание + перемещение: вращение, Два пальца: масштаб/панорамирование • Двойное касание: скрыть/показать UI
     </div>
     
     <div class="loading" id="loading">
@@ -112,6 +359,11 @@
         let currentModel = null;
         let axesVisible = true;
         let gridVisible = true;
+        let pointLight, lightHelper;
+        let controlsCollapsed = false;
+        let uiVisible = true;
+        let lightAttachedToCamera = false;
+        let lightHelperVisible = true;
 
         // Инициализация сцены
         function init() {
@@ -131,15 +383,25 @@
             });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
             // Освещение
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.2);
             scene.add(ambientLight);
 
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-            directionalLight.position.set(10, 10, 5);
-            directionalLight.castShadow = true;
-            scene.add(directionalLight);
+            // Точечный свет (PointLight) - светит во все стороны
+            pointLight = new THREE.PointLight(0xffffff, 1, 10, 1);
+            pointLight.position.set(5, 10, 7);
+            pointLight.castShadow = true;
+            pointLight.shadow.mapSize.width = 1024;
+            pointLight.shadow.mapSize.height = 1024;
+            pointLight.shadow.camera.near = 0.5;
+            pointLight.shadow.camera.far = 50;
+            scene.add(pointLight);
+
+            // Визуализатор точечного света
+            lightHelper = new THREE.PointLightHelper(pointLight, 1);
+            scene.add(lightHelper);
 
             // Сетка
             const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
@@ -151,21 +413,295 @@
             axesHelper.name = 'axes';
             scene.add(axesHelper);
 
-            // OrbitControls - свободная камера
+            // OrbitControls с улучшенной поддержкой мобильных
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
-            controls.screenSpacePanning = false;
+            controls.screenSpacePanning = true;
             controls.minDistance = 1;
             controls.maxDistance = 500;
-            controls.maxPolarAngle = Math.PI; // Можно вращать под любым углом
+            controls.maxPolarAngle = Math.PI;
+            
+            // Настройки для мобильных устройств
+            if (isMobile()) {
+                controls.enablePan = true;
+                controls.touches = {
+                    ONE: THREE.TOUCH.ROTATE,
+                    TWO: THREE.TOUCH.DOLLY_PAN
+                };
+            }
 
             // Обработчики событий
             window.addEventListener('resize', onWindowResize);
             document.getElementById('modelInput').addEventListener('change', handleFileSelect);
+            
+            // Обработчики для настройки света
+            document.getElementById('lightX').addEventListener('input', updateLight);
+            document.getElementById('lightY').addEventListener('input', updateLight);
+            document.getElementById('lightZ').addEventListener('input', updateLight);
+            document.getElementById('lightIntensity').addEventListener('input', updateLight);
+            document.getElementById('lightDistance').addEventListener('input', updateLight);
+            document.getElementById('lightDecay').addEventListener('input', updateLight);
+            document.getElementById('lightColor').addEventListener('input', updateLight);
+            
+            // Обработчик двойного касания для скрытия UI
+            let lastTouchTime = 0;
+            canvas.addEventListener('touchend', function(e) {
+                const currentTime = new Date().getTime();
+                const timeSinceLastTouch = currentTime - lastTouchTime;
+                
+                if (timeSinceLastTouch < 300 && timeSinceLastTouch > 0) {
+                    // Двойное касание
+                    toggleUI();
+                    e.preventDefault();
+                }
+                
+                lastTouchTime = currentTime;
+            });
+            
+            // Обработчик двойного клика для десктопов
+            canvas.addEventListener('dblclick', toggleUI);
+            
+            // Предотвращаем стандартное поведение жестов
+            document.addEventListener('touchmove', function(e) {
+                if (e.scale !== 1) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+            
+            // Добавляем обработчики для предотвращения передачи событий от панели управления к Three.js
+            setupControlPanelEvents();
+            
+            // Инициализация значений слайдеров
+            updateLightValues();
+
+            // Авто-скрытие панели на мобильных через 5 секунд
+            if (isMobile()) {
+                setTimeout(() => {
+                    if (uiVisible && !controlsCollapsed) {
+                        collapseControls();
+                    }
+                }, 5000);
+            }
 
             // Запуск анимации
             animate();
+        }
+
+        // Настройка обработчиков событий для панели управления
+        function setupControlPanelEvents() {
+            const controlsPanel = document.getElementById('controls-panel');
+            
+            // Останавливаем всплытие событий от панели управления
+            controlsPanel.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+            });
+            
+            controlsPanel.addEventListener('touchmove', function(e) {
+                e.stopPropagation();
+            });
+            
+            controlsPanel.addEventListener('touchend', function(e) {
+                e.stopPropagation();
+            });
+            
+            controlsPanel.addEventListener('wheel', function(e) {
+                e.stopPropagation();
+            });
+            
+            // Также для всех интерактивных элементов внутри панели
+            const interactiveElements = controlsPanel.querySelectorAll('input, button, .light-preview');
+            interactiveElements.forEach(element => {
+                element.addEventListener('touchstart', function(e) {
+                    e.stopPropagation();
+                });
+                
+                element.addEventListener('touchmove', function(e) {
+                    e.stopPropagation();
+                });
+                
+                element.addEventListener('touchend', function(e) {
+                    e.stopPropagation();
+                });
+            });
+        }
+
+        // Проверка на мобильное устройство
+        function isMobile() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                   window.innerWidth <= 768;
+        }
+
+        // Обновление света
+        function updateLight() {
+            const x = parseFloat(document.getElementById('lightX').value);
+            const y = parseFloat(document.getElementById('lightY').value);
+            const z = parseFloat(document.getElementById('lightZ').value);
+            const intensity = parseFloat(document.getElementById('lightIntensity').value);
+            const distance = parseFloat(document.getElementById('lightDistance').value);
+            const decay = parseFloat(document.getElementById('lightDecay').value);
+            const color = document.getElementById('lightColor').value;
+            
+            // Обновляем точечный свет
+            if (!lightAttachedToCamera) {
+                pointLight.position.set(x, y, z);
+            }
+            pointLight.intensity = intensity;
+            pointLight.distance = distance;
+            pointLight.decay = decay;
+            pointLight.color = new THREE.Color(color);
+            
+            // Обновляем значения на слайдерах
+            document.getElementById('lightXValue').textContent = x.toFixed(1);
+            document.getElementById('lightYValue').textContent = y.toFixed(1);
+            document.getElementById('lightZValue').textContent = z.toFixed(1);
+            document.getElementById('intensityValue').textContent = intensity.toFixed(1);
+            document.getElementById('distanceValue').textContent = distance.toFixed(1);
+            document.getElementById('decayValue').textContent = decay.toFixed(1);
+            
+            // Обновляем визуализатор света
+            lightHelper.update();
+            
+            // Обновляем визуальное представление положения
+            updateLightPreview(x, y, z);
+        }
+
+        // Обновление визуального представления положения света
+        function updateLightPreview(x, y, z) {
+            const lightDirection = document.getElementById('lightDirection');
+            
+            // Нормализуем координаты для представления в 2D
+            const length = Math.sqrt(x*x + y*y + z*z);
+            const normX = x / length;
+            const normY = y / length;
+            const normZ = z / length;
+            
+            // Преобразуем 3D направление в 2D координаты для предпросмотра
+            const previewX = 50 + normX * 25;
+            const previewY = 50 - normZ * 25;
+            
+            // Устанавливаем позицию источника в предпросмотре
+            lightDirection.style.left = `${previewX}%`;
+            lightDirection.style.top = `${previewY}%`;
+            
+            // Изменяем размер в зависимости от высоты (Y)
+            const size = 20 + normY * 20;
+            lightDirection.style.width = `${size}px`;
+            lightDirection.style.height = `${size}px`;
+            
+            // Меняем цвет в зависимости от настроек цвета
+            const color = document.getElementById('lightColor').value;
+            lightDirection.style.background = `radial-gradient(circle, ${color} 0%, ${this.adjustColor(color, -50)} 100%)`;
+        }
+
+        // Вспомогательная функция для изменения цвета
+        function adjustColor(hex, percent) {
+            // Упрощенная функция для затемнения цвета
+            let r = parseInt(hex.substring(1, 3), 16);
+            let g = parseInt(hex.substring(3, 5), 16);
+            let b = parseInt(hex.substring(5, 7), 16);
+            
+            r = Math.max(0, Math.min(255, r + percent));
+            g = Math.max(0, Math.min(255, g + percent));
+            b = Math.max(0, Math.min(255, b + percent));
+            
+            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+        }
+
+        // Обновление значений слайдеров
+        function updateLightValues() {
+            document.getElementById('lightXValue').textContent = pointLight.position.x.toFixed(1);
+            document.getElementById('lightYValue').textContent = pointLight.position.y.toFixed(1);
+            document.getElementById('lightZValue').textContent = pointLight.position.z.toFixed(1);
+            document.getElementById('intensityValue').textContent = pointLight.intensity.toFixed(1);
+            document.getElementById('distanceValue').textContent = pointLight.distance.toFixed(1);
+            document.getElementById('decayValue').textContent = pointLight.decay.toFixed(1);
+            
+            // Устанавливаем значения слайдеров
+            document.getElementById('lightX').value = pointLight.position.x;
+            document.getElementById('lightY').value = pointLight.position.y;
+            document.getElementById('lightZ').value = pointLight.position.z;
+            document.getElementById('lightIntensity').value = pointLight.intensity;
+            document.getElementById('lightDistance').value = pointLight.distance;
+            document.getElementById('lightDecay').value = pointLight.decay;
+            
+            // Обновляем визуальное представление
+            updateLightPreview(
+                pointLight.position.x,
+                pointLight.position.y,
+                pointLight.position.z
+            );
+        }
+
+        // Сброс света к значениям по умолчанию
+        function resetLight() {
+            pointLight.position.set(5, 10, 7);
+            pointLight.intensity = 1;
+            pointLight.distance = 10;
+            pointLight.decay = 1;
+            pointLight.color = new THREE.Color(0xffffff);
+            document.getElementById('lightColor').value = '#ffffff';
+            lightAttachedToCamera = false;
+            updateLightValues();
+        }
+
+        // Прикрепить свет к камере
+        function attachLightToCamera() {
+            lightAttachedToCamera = true;
+            pointLight.position.copy(camera.position);
+        }
+
+        // Открепить свет от камеры
+        function detachLightFromCamera() {
+            lightAttachedToCamera = false;
+            updateLightValues();
+        }
+
+        // Переключение видимости индикатора света
+        function toggleLightHelper() {
+            lightHelperVisible = !lightHelperVisible;
+            lightHelper.visible = lightHelperVisible;
+            document.getElementById('lightHelperBtn').textContent = 
+                'Индикатор света: ' + (lightHelperVisible ? 'ВКЛ' : 'ВЫКЛ');
+        }
+
+        // Сворачивание/разворачивание панели управления
+        function toggleControls() {
+            if (controlsCollapsed) {
+                expandControls();
+            } else {
+                collapseControls();
+            }
+        }
+
+        function collapseControls() {
+            const container = document.getElementById('controls-container');
+            const toggleButton = document.querySelector('.toggle-controls');
+            
+            container.classList.add('collapsed');
+            toggleButton.textContent = 'Показать панель';
+            controlsCollapsed = true;
+        }
+
+        function expandControls() {
+            const container = document.getElementById('controls-container');
+            const toggleButton = document.querySelector('.toggle-controls');
+            
+            container.classList.remove('collapsed');
+            toggleButton.textContent = 'Скрыть панель';
+            controlsCollapsed = false;
+        }
+
+        // Переключение видимости UI
+        function toggleUI() {
+            if (uiVisible) {
+                document.body.classList.add('hide-ui');
+                document.body.classList.remove('show-ui');
+            } else {
+                document.body.classList.remove('hide-ui');
+                document.body.classList.add('show-ui');
+            }
+            uiVisible = !uiVisible;
         }
 
         // Обработка выбора файла
@@ -233,6 +769,7 @@
                 },
                 function(progress) {
                     console.log((progress.loaded / progress.total * 100) + '% загружено');
+                    document.getElementById('loading').textContent = `Загрузка: ${Math.round(progress.loaded / progress.total * 100)}%`;
                 },
                 function(error) {
                     console.error('Ошибка загрузки GLTF:', error);
@@ -255,6 +792,7 @@
                 },
                 function(progress) {
                     console.log((progress.loaded / progress.total * 100) + '% загружено');
+                    document.getElementById('loading').textContent = `Загрузка: ${Math.round(progress.loaded / progress.total * 100)}%`;
                 },
                 function(error) {
                     console.error('Ошибка загрузки FBX:', error);
@@ -277,6 +815,7 @@
                 },
                 function(progress) {
                     console.log((progress.loaded / progress.total * 100) + '% загружено');
+                    document.getElementById('loading').textContent = `Загрузка: ${Math.round(progress.loaded / progress.total * 100)}%`;
                 },
                 function(error) {
                     console.error('Ошибка загрузки OBJ:', error);
@@ -360,6 +899,13 @@
         // Анимация
         function animate() {
             requestAnimationFrame(animate);
+            
+            // Если свет прикреплен к камере, обновляем его позицию
+            if (lightAttachedToCamera) {
+                pointLight.position.copy(camera.position);
+                lightHelper.update();
+            }
+            
             controls.update();
             renderer.render(scene, camera);
         }
